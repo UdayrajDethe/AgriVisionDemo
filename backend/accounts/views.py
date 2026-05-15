@@ -16,6 +16,7 @@ from .oracle_client import (
     get_connection,
     hash_password,
     iso_datetime,
+    label_key,
     parse_token,
     sign_token,
     verify_password,
@@ -215,7 +216,7 @@ def diseases(_request):
         _ensure_schema_ready()
         rows = execute_query(
             """
-            SELECT DISEASE_ID, NAME, CROP_NAME, SYMPTOMS, TREATMENT, PREVENTION, DESCRIPTION
+            SELECT DISEASE_ID, NAME, CROP_NAME, IS_HEALTHY, SYMPTOMS, TREATMENT, PREVENTION, DESCRIPTION
             FROM AGRIVISION_DISEASES
             ORDER BY NAME
             """
@@ -313,14 +314,14 @@ def analyze_image(request):
     try:
         _ensure_schema_ready()
         prediction = _call_roboflow(image)
-        disease = execute_one(
+        disease_rows = execute_query(
             """
-            SELECT DISEASE_ID, NAME, CROP_NAME, SYMPTOMS, TREATMENT, PREVENTION, DESCRIPTION
+            SELECT DISEASE_ID, NAME, CROP_NAME, IS_HEALTHY, SYMPTOMS, TREATMENT, PREVENTION, DESCRIPTION
             FROM AGRIVISION_DISEASES
-            WHERE LOWER(NAME) = :name
-            """,
-            {"name": prediction["predictedLabel"].lower()},
+            """
         )
+        predicted_key = label_key(prediction["predictedLabel"])
+        disease = next((row for row in disease_rows if label_key(row.get("NAME")) == predicted_key), None)
 
         analysis_id = str(int(time.time() * 1000))
         with get_connection() as connection:
@@ -340,6 +341,19 @@ def analyze_image(request):
                         "predicted_label": prediction["predictedLabel"],
                         "confidence": prediction["confidence"],
                         "raw_response": json.dumps(prediction["raw"]),
+                    },
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO CROP_ANALYSES (CROP_NAME, STATUS, HEALTH_SCORE)
+                    VALUES (:crop_name, :status, :health_score)
+                    """,
+                    {
+                        "crop_name": disease.get("CROP_NAME") if disease else "Unknown Crop",
+                        "status": "Healthy" if disease and disease.get("IS_HEALTHY") == "Y" else "Diseased",
+                        "health_score": round(prediction["confidence"] * 100)
+                        if disease and disease.get("IS_HEALTHY") == "Y"
+                        else max(0, round((1 - prediction["confidence"]) * 100)),
                     },
                 )
                 connection.commit()

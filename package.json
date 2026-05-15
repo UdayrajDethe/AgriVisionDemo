@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "db:init": "python backend/manage.py init_schema",
+    "backend": "python backend/manage.py runserver 4000"
+  },
   "dependencies": {
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1"

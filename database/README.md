@@ -45,5 +45,21 @@ Frontend calls `/api/dashboard` through Vite proxy.
 
 ## Tables
 
-- `CROP_ANALYSES` -> crop dashboard data
 - `AGRIVISION_USERS` -> login/register users
+- `AGRIVISION_DISEASES` -> potato/tomato model classes and treatment guidance
+- `AGRIVISION_ANALYSES` -> uploaded image prediction history
+- `CROP_ANALYSES` -> crop dashboard summary data
+
+`npm run db:init` creates the full schema and seeds these model classes:
+
+- Potato Late Blight
+- Potato healthy
+- Potato_Early_blight
+- Tomato Bacterial spot
+- Tomato Early Blight
+- Tomato Healthy
+- Tomato Late Blight
+- Tomato Leaf Mold
+- Tomato mosaic virus
+- Tomato_Target_Spot
+- Tomato_YellowLeaf__Curl_Viru

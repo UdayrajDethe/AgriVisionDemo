@@ -7,6 +7,7 @@ Django backend for AgriVision auth, Oracle dashboard data, disease data, Roboflo
 ```powershell
 cd backend
 py -m pip install -r requirements.txt
+py manage.py init_schema
 py manage.py runserver 4000
 ```
 
@@ -25,7 +26,7 @@ The React frontend calls `http://localhost:4000`, so Django replaces the old Nod
 ## Oracle Tables
 
 - `AGRIVISION_USERS`
-- `AGRIVISION_DISEASES`
+- `AGRIVISION_DISEASES` seeded with the Potato and Tomato model classes
 - `AGRIVISION_ANALYSES`
 - `CROP_ANALYSES`
 

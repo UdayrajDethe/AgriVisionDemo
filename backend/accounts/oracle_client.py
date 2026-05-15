@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 from datetime import datetime, timezone
@@ -25,7 +26,124 @@ def load_env_file(path):
 
 
 load_env_file(BASE_DIR / ".env")
-load_env_file(BASE_DIR.parent / "database" / ".env")
+load_env_file(BASE_DIR / "database" / ".env")
+
+DISEASE_SEEDS = [
+    {
+        "disease_id": "POTATO_LATE_BLIGHT",
+        "name": "Potato Late Blight",
+        "crop_name": "Potato",
+        "is_healthy": "N",
+        "symptoms": "Water-soaked leaf spots that turn brown or black, white fungal growth in humid weather, and fast leaf collapse.",
+        "treatment": "Remove infected leaves, avoid overhead watering, improve airflow, and apply a recommended fungicide for late blight.",
+        "prevention": "Use certified seed potatoes, rotate crops, keep foliage dry, and monitor fields closely during cool wet weather.",
+        "description": "A destructive potato disease commonly caused by Phytophthora infestans.",
+    },
+    {
+        "disease_id": "POTATO_HEALTHY",
+        "name": "Potato healthy",
+        "crop_name": "Potato",
+        "is_healthy": "Y",
+        "symptoms": "No visible disease symptoms; leaves appear green and evenly developed.",
+        "treatment": "No treatment needed. Continue regular monitoring and balanced irrigation.",
+        "prevention": "Maintain good field sanitation, crop rotation, and regular scouting.",
+        "description": "Healthy potato leaf class from the trained model.",
+    },
+    {
+        "disease_id": "POTATO_EARLY_BLIGHT",
+        "name": "Potato_Early_blight",
+        "crop_name": "Potato",
+        "is_healthy": "N",
+        "symptoms": "Dark brown leaf spots with concentric rings, usually starting on older lower leaves.",
+        "treatment": "Remove infected foliage where practical and use an appropriate fungicide if disease pressure is high.",
+        "prevention": "Rotate crops, avoid plant stress, mulch to reduce soil splash, and remove plant debris after harvest.",
+        "description": "A fungal potato leaf disease often associated with Alternaria species.",
+    },
+    {
+        "disease_id": "TOMATO_BACTERIAL_SPOT",
+        "name": "Tomato Bacterial spot",
+        "crop_name": "Tomato",
+        "is_healthy": "N",
+        "symptoms": "Small dark water-soaked leaf spots, yellow halos, and rough scabby spots on fruit.",
+        "treatment": "Remove badly affected leaves and use copper-based bactericides where locally recommended.",
+        "prevention": "Use disease-free seed, avoid overhead watering, disinfect tools, and rotate away from tomato and pepper.",
+        "description": "A bacterial disease that spreads quickly in warm wet conditions.",
+    },
+    {
+        "disease_id": "TOMATO_EARLY_BLIGHT",
+        "name": "Tomato Early Blight",
+        "crop_name": "Tomato",
+        "is_healthy": "N",
+        "symptoms": "Brown target-like rings on older leaves, yellowing around lesions, and lower leaf drop.",
+        "treatment": "Prune infected lower leaves, improve airflow, and apply a suitable fungicide when needed.",
+        "prevention": "Stake plants, mulch soil, rotate crops, and remove infected debris.",
+        "description": "A common tomato fungal disease caused mainly by Alternaria solani.",
+    },
+    {
+        "disease_id": "TOMATO_HEALTHY",
+        "name": "Tomato Healthy",
+        "crop_name": "Tomato",
+        "is_healthy": "Y",
+        "symptoms": "No visible disease symptoms; leaves are green, firm, and normally shaped.",
+        "treatment": "No treatment needed. Keep monitoring plant health.",
+        "prevention": "Use balanced watering, clean tools, good spacing, and regular scouting.",
+        "description": "Healthy tomato leaf class from the trained model.",
+    },
+    {
+        "disease_id": "TOMATO_LATE_BLIGHT",
+        "name": "Tomato Late Blight",
+        "crop_name": "Tomato",
+        "is_healthy": "N",
+        "symptoms": "Large irregular dark lesions, pale green water-soaked areas, and rapid leaf or stem collapse.",
+        "treatment": "Remove infected material, avoid wet foliage, and apply a late-blight fungicide as advised locally.",
+        "prevention": "Use resistant varieties where possible, increase plant spacing, and avoid overhead irrigation.",
+        "description": "A serious tomato disease commonly caused by Phytophthora infestans.",
+    },
+    {
+        "disease_id": "TOMATO_LEAF_MOLD",
+        "name": "Tomato Leaf Mold",
+        "crop_name": "Tomato",
+        "is_healthy": "N",
+        "symptoms": "Yellow patches on upper leaf surfaces with olive-gray mold growth underneath.",
+        "treatment": "Improve ventilation, remove infected leaves, and use a labeled fungicide if necessary.",
+        "prevention": "Reduce humidity, space plants well, and avoid prolonged leaf wetness.",
+        "description": "A tomato leaf disease favored by high humidity and poor airflow.",
+    },
+    {
+        "disease_id": "TOMATO_MOSAIC_VIRUS",
+        "name": "Tomato mosaic virus",
+        "crop_name": "Tomato",
+        "is_healthy": "N",
+        "symptoms": "Mottled light and dark green leaf pattern, distorted leaves, and reduced plant growth.",
+        "treatment": "No cure for infected plants. Remove infected plants and control spread through sanitation.",
+        "prevention": "Use resistant varieties, wash hands and tools, and avoid handling plants when wet.",
+        "description": "A viral tomato disease that spreads through contact and contaminated tools.",
+    },
+    {
+        "disease_id": "TOMATO_TARGET_SPOT",
+        "name": "Tomato_Target_Spot",
+        "crop_name": "Tomato",
+        "is_healthy": "N",
+        "symptoms": "Small brown lesions that enlarge into target-like spots, often with yellowing tissue around them.",
+        "treatment": "Remove infected leaves, increase airflow, and use appropriate fungicides when disease is spreading.",
+        "prevention": "Avoid overhead watering, rotate crops, and remove crop residue.",
+        "description": "A fungal tomato disease that can reduce foliage and fruit quality.",
+    },
+    {
+        "disease_id": "TOMATO_YELLOW_LEAF_CURL_VIRUS",
+        "name": "Tomato_YellowLeaf__Curl_Viru",
+        "crop_name": "Tomato",
+        "is_healthy": "N",
+        "symptoms": "Yellowing, upward leaf curling, stunted growth, and poor fruit set.",
+        "treatment": "There is no cure. Remove infected plants and manage whitefly populations.",
+        "prevention": "Use resistant varieties, control whiteflies, remove weeds, and protect seedlings with netting.",
+        "description": "A viral tomato disease commonly spread by whiteflies.",
+    },
+]
+
+
+def label_key(value):
+    return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
 
 
 def _get_oracledb():
@@ -155,6 +273,7 @@ def ensure_schema():
                   DISEASE_ID VARCHAR2(40) NOT NULL,
                   NAME VARCHAR2(120) NOT NULL,
                   CROP_NAME VARCHAR2(100),
+                  IS_HEALTHY CHAR(1) DEFAULT 'N' NOT NULL,
                   SYMPTOMS CLOB,
                   TREATMENT CLOB,
                   PREVENTION CLOB,
@@ -165,6 +284,7 @@ def ensure_schema():
                 """,
             )
             run_ddl(cursor, "CREATE SEQUENCE AGRIVISION_DISEASES_SEQ START WITH 1 INCREMENT BY 1")
+            run_ddl(cursor, "ALTER TABLE AGRIVISION_DISEASES ADD IS_HEALTHY CHAR(1) DEFAULT 'N' NOT NULL", exists_error_code=1430)
             cursor.execute(
                 """
                 CREATE OR REPLACE TRIGGER AGRIVISION_DISEASES_BI
@@ -177,6 +297,45 @@ def ensure_schema():
                 END;
                 """
             )
+
+            for disease in DISEASE_SEEDS:
+                cursor.execute(
+                    """
+                    SELECT ID
+                    FROM AGRIVISION_DISEASES
+                    WHERE DISEASE_ID = :disease_id OR LOWER(NAME) = LOWER(:name)
+                    """,
+                    {"disease_id": disease["disease_id"], "name": disease["name"]},
+                )
+                existing = cursor.fetchone()
+
+                if existing:
+                    cursor.execute(
+                        """
+                        UPDATE AGRIVISION_DISEASES
+                        SET DISEASE_ID = :disease_id,
+                            NAME = :name,
+                            CROP_NAME = :crop_name,
+                            IS_HEALTHY = :is_healthy,
+                            SYMPTOMS = :symptoms,
+                            TREATMENT = :treatment,
+                            PREVENTION = :prevention,
+                            DESCRIPTION = :description
+                        WHERE ID = :id
+                        """,
+                        {**disease, "id": existing[0]},
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO AGRIVISION_DISEASES
+                          (DISEASE_ID, NAME, CROP_NAME, IS_HEALTHY, SYMPTOMS, TREATMENT, PREVENTION, DESCRIPTION)
+                        VALUES
+                          (:disease_id, :name, :crop_name, :is_healthy, :symptoms, :treatment, :prevention, :description)
+                        """,
+                        disease,
+                    )
+
 
             run_ddl(
                 cursor,

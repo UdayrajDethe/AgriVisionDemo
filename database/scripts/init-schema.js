@@ -1,4 +1,7 @@
 import 'dotenv/config'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import oracledb from 'oracledb'
 
 const clientLibDir = process.env.ORACLE_CLIENT_LIB_DIR
@@ -17,38 +20,50 @@ if (missingConfig.length) {
   throw new Error(`Missing Oracle configuration: ${missingConfig.join(', ')}`)
 }
 
-const tableName = process.env.ORACLE_TABLE || 'CROP_ANALYSES'
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const setupSqlPath = path.resolve(scriptDir, '../sql/setup.sql')
 
-const createTableSql = `
-  CREATE TABLE ${tableName} (
-    ID NUMBER PRIMARY KEY,
-    CROP_NAME VARCHAR2(100) NOT NULL,
-    STATUS VARCHAR2(20) NOT NULL,
-    CREATED_AT DATE DEFAULT SYSDATE NOT NULL,
-    HEALTH_SCORE NUMBER(3)
-  )
-`
+const isSlashTerminated = (sql) => {
+  const normalized = sql.trimStart().toUpperCase()
+  return normalized.startsWith('BEGIN') || normalized.startsWith('CREATE OR REPLACE TRIGGER')
+}
 
-const createSequenceSql = `CREATE SEQUENCE ${tableName}_SEQ START WITH 1 INCREMENT BY 1`
+const parseSqlScript = (script) => {
+  const statements = []
+  let current = []
 
-const createTriggerSql = `
-  CREATE OR REPLACE TRIGGER ${tableName}_BI
-  BEFORE INSERT ON ${tableName}
-  FOR EACH ROW
-  BEGIN
-    IF :NEW.ID IS NULL THEN
-      SELECT ${tableName}_SEQ.NEXTVAL INTO :NEW.ID FROM DUAL;
-    END IF;
-  END;
-`
+  const pushCurrent = () => {
+    const rawStatement = current.join('\n').trim()
+    const statement = isSlashTerminated(rawStatement) ? rawStatement : rawStatement.replace(/;$/, '').trim()
+    if (statement) {
+      statements.push(statement)
+    }
+    current = []
+  }
 
-const sampleRows = [
-  ['Tomato', 'Healthy', 1, 92],
-  ['Potato', 'Diseased', 2, 48],
-  ['Wheat', 'Healthy', 3, 86],
-  ['Rice', 'Diseased', 4, 55],
-  ['Maize', 'Healthy', 5, 78],
-]
+  for (const rawLine of script.split(/\r?\n/)) {
+    const line = rawLine.trim()
+
+    if (line === '/') {
+      pushCurrent()
+      continue
+    }
+
+    if (!line || line.startsWith('--')) {
+      continue
+    }
+
+    current.push(rawLine)
+
+    const statement = current.join('\n')
+    if (!isSlashTerminated(statement) && line.endsWith(';')) {
+      pushCurrent()
+    }
+  }
+
+  pushCurrent()
+  return statements
+}
 
 const connection = await oracledb.getConnection({
   user: process.env.ORACLE_USER,
@@ -57,55 +72,15 @@ const connection = await oracledb.getConnection({
 })
 
 try {
-  try {
-    await connection.execute(createTableSql)
-    console.log(`Created table ${tableName}`)
-  } catch (error) {
-    if (error.errorNum === 955) {
-      console.log(`Table ${tableName} already exists`)
-    } else {
-      throw error
-    }
+  const setupSql = await fs.readFile(setupSqlPath, 'utf8')
+  const statements = parseSqlScript(setupSql)
+
+  for (const statement of statements) {
+    await connection.execute(statement)
   }
 
-  try {
-    await connection.execute(createSequenceSql)
-    console.log(`Created sequence ${tableName}_SEQ`)
-  } catch (error) {
-    if (error.errorNum === 955) {
-      console.log(`Sequence ${tableName}_SEQ already exists`)
-    } else {
-      throw error
-    }
-  }
-
-  await connection.execute(createTriggerSql)
-  console.log(`Created or replaced trigger ${tableName}_BI`)
-
-  const countResult = await connection.execute(`SELECT COUNT(*) AS TOTAL FROM ${tableName}`, [], {
-    outFormat: oracledb.OUT_FORMAT_OBJECT,
-  })
-  const total = Number(countResult.rows?.[0]?.TOTAL || 0)
-
-  if (total === 0) {
-    await connection.executeMany(
-      `INSERT INTO ${tableName} (CROP_NAME, STATUS, CREATED_AT, HEALTH_SCORE)
-       VALUES (:cropName, :status, SYSDATE - :daysAgo, :healthScore)`,
-      sampleRows,
-      {
-        bindDefs: [
-          { type: oracledb.STRING, maxSize: 100 },
-          { type: oracledb.STRING, maxSize: 20 },
-          { type: oracledb.NUMBER },
-          { type: oracledb.NUMBER },
-        ],
-      },
-    )
-    await connection.commit()
-    console.log(`Inserted ${sampleRows.length} sample rows`)
-  } else {
-    console.log(`Skipped sample rows because ${tableName} already has ${total} row(s)`)
-  }
+  await connection.commit()
+  console.log(`Oracle schema initialized from ${setupSqlPath}`)
 } finally {
   await Promise.race([
     connection.close(),
